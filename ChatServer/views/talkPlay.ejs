@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title><%=title%></title>
+	<link rel="stylesheet" href="../stylesheets/styleT.css">
+	<link rel="stylesheet" href="../stylesheets/fullcalendar.css" rel='stylesheet'>
+	<link rel="stylesheet" href="../stylesheets/fullcalendar.print.min.css" rel='stylesheet' media='print'>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+	<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+	<link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-orange.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+    <script src="/socket.io/socket.io.js"></script>
+	<script src="/js/socket.io-stream.js"></script>
+	<script src="/js/socket.io-file-client.js"></script>
+	<script src="/js/dragdrop.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>	
+	<script src='/js/moment.min.js'></script>
+	<script src='/js/fullcalendar.js'></script>	
+	<script src='/js/cd.js'></script>
+	<script src='/js/ko.js'></script>
+	
+    <script>
+    $(function(){
+	  //var event = document.createEvent("HTMLEvents"); 
+	  //event.initEvent("dbclick",true,false); 
+	  $('.fmt').hide();
+	  $('#input').focus();
+	  var scrollStatus = false;
+	  var nowScrollTop = 0;
+	  var loginId = "<%=loginId%>";
+	  console.log('현재 로그인한사람',loginId);
+	  var loginName = "<%=loginName%>";
+	  var chatId = "<%=chatId%>";
+	  var chatNm = "<%=chatNm%>";
+	  var roomNo = "<%=roomNo%>";
+      var socket = io('http://'+location.host);
+	  var uploader = new SocketIOFileClient(socket);
+	  var form = document.getElementById('form');
+	  var today = "";
+	  var pMap = new Map();
+	  var cMap = new Map();
+	  var cCon = new Map();
+	  var resMap = new Map();
+	  var cCnt = 0;
+	  var searchMode=false;
+	  var fs;
+	  var ls;
+	  var ns;
+	  var sendFiles;
+	  $.get( "/today", function( d ) { today = d; });
+      DragDrop('body', {
+        onDrop: function (files, pos) {
+			if(files[0].size==0){
+				alert('파일이 비어있습니다.');
+				return;
+			}
+			$('.fmt-upload').hide();
+			if((files.length==1 && files[0].name.split('.')[1]=='png')||
+				(files.length==1 && files[0].name.split('.')[1]=='jpg')||
+				(files.length==1 && files[0].name.split('.')[1]=='gif')||
+				(files.length==1 && files[0].name.split('.')[1]=='bmp')){
+				var fileName = files[0].name;
+				var d = new Date();
+				var uploadIds = uploader.upload(files, {
+					data: { "oName" : fileName,
+							"fName" : 'PMS_'+roomNo+d.getFullYear()+fileName,
+							"fImg" : "true"
+						  }
+				});					
+				return;
+			}
+			
+			if(files.length>5){
+				alert('파일 드래그는 최대 5개까지 가능합니다.');
+				return;
+			}
+            var fileNames = files.map(function (file) { return file.name });
+			//console.log(files);
+			var txt = '<li class="w3-green w3-center">다음 파일을 전송합니다.</li>';
+			
+			for(var i in fileNames){
+				txt+="<li>["+ ((i*1)+1) + "]" + fileNames[i] + "</li>";
+				//console.log(files[i]);
+			}
+			txt+="<h4 class='w3-center'>총 "+files.length+" 개의 파일을 전송 하시겠습니까?</h4>";
+			$('#cRes').html(txt);
+			var resTxt = "";
+			$('.fmt-confirm').hide();
+			sendFiles = files;
+			$('#dropModal').css('display','block');
+			return;
+			if(confirm(txt)){
+				var tCnt = sendFiles.length;
+				var sCnt =0;
+				var fCnt =0;
+				for(var i in sendFiles){
+					var d = new Date();			
+					if(sendFiles[i].size>30004304){
+						//console.log(sendFiles[i].name + '[전송실패 30MB초과] ');
+						resTxt += sendFiles[i].name + '[전송실패 30MB초과]<br>';
+						fCnt++;
+					}else{
+						var file = [sendFiles[i]];
+						//console.log(files[i].name + ' : 보내기전');
+						var uploadIds = uploader.upload(file, {
+							data: { "oName" : fileNames[i],
+									"fName" : 'PMS_'+roomNo+d.getFullYear()+fileNames[i],
+									"fImg" : "false"
+								  }
+						});						
+						resTxt += sendFiles[i].name + '[전송 완료]<br>';
+						//console.log(uploadIds);
+						//console.log(sendFiles[i].name + ' : 보내기후');
+						sCnt++;						
+					}
+				}
+				var cTxt = '<h4>[ 요청 : '+tCnt+' ] [ 성공 : '+sCnt+'  실패 : '+fCnt+' ]';
+				$('#iResCnt').html(cTxt);
+				$('#iRes').html(resTxt);
+				$('.fmt-info').slideDown();
+				$('.fmt-info').delay(2500).slideUp();				
+			}				
+        },
+        onDropText: function (text, pos) {
+          //console.log('onDropText', text);
+          //console.log('Dropped at coordinates', pos.x, pos.y);
+		  if(confirm('[ ' + text + ' ]\n해당 내용으로 html을 전송 하시겠습니까?')){			  
+			  var title = prompt('전송 제목을 입력해주세요.');
+			  $.ajax({
+					url:'/talk/createHtml',
+					type:'post',
+					dataType: 'text',
+					data : {'txt':text,'nm':loginName,'rn':roomNo}
+				}).done(function(data){
+					var fileName = data;
+					var sendMsg = title + '.html 파일을 보냈습니다.<br><a id="'+fileName+'" href="/downloadFile/'+fileName+'/'+roomNo+'"><button style="margin:5px"class="w3-button w3-blue w3-round-large">다운로드</button></a>' ;							        
+					socket.emit('message', sendMsg);
+					$('#input').val('');
+				});
+			
+		  }
+        }
+      });
+	 
+	  uploader.on('start', function(fileInfo) {
+	    $('#fusPro').show();
+		if(fileInfo.name=='tmpfile.jk'){
+			return;
+		}
+		$('.fmt-upload').fadeIn();
+		console.log('Start uploading', fileInfo);
+	  });
+	  uploader.on('stream', function(fileInfo) {
+	    $('#fusPro').show();
+		var percent = (fileInfo.sent/fileInfo.size)*100;
+		console.log(percent);
+		//console.log(percent+'%' );
+		$('#fusPro').html(percent.toFixed(1)+'%');
+		$('#fusPro').css('width',percent+'%');
+		//console.log('Streaming... sent ' + fileInfo.sent + ' bytes.');
+	  });
+	  
+	  uploader.on('complete', function(fileInfo) {
+	  /*
+		console.log('Upload Complete');
+		console.log(fileInfo.name.split('.')[0]);
+		if(fileInfo.name.split('.')[0]!='tmpfile' && fileInfo.fImg=='true'){
+			console.log('이미지입니다.');
+			$('.fmt-upload').hide();			
+			$('.fmt-success').show();
+			$('.fmt-success').fadeOut(1000);		
+			//socket.emit('upload completeMsgImg', fileInfo,loginId,loginName,roomNo);
+			$('#fusPro').html('');
+			$('#fusPro').hide();	
+		}else if(fileInfo.name.split('.')[0]!='tmpfile' && fileInfo.fImg=='false'){
+			console.log(fileInfo.data.fName);
+			//$('#fusPro').html('전송 완료 !!');
+			$('.fmt-upload').hide();
+			console.log('Upload Complete', fileInfo);
+			$('.fmt-success').show();
+			$('.fmt-success').fadeOut(1000);		
+			socket.emit('upload completeMsg', fileInfo,loginId,loginName,roomNo);
+			$('#fusPro').html('');
+			$('#fusPro').hide();		
+		}
+		*/
+		console.log(fileInfo.data.fName);
+		//$('#fusPro').html('전송 완료 !!');
+		$('.fmt-upload').hide();
+		$('.fmt-success').show();
+		$('.fmt-success').fadeOut(1000);				
+		$('#fusPro').hide();
+		
+		if(fileInfo.data.fImg=='true'){
+			socket.emit('upload completeIMsg', fileInfo,loginId,loginName,roomNo);		
+		}else if(fileInfo.data.fImg=='false'){
+			socket.emit('upload completeMsg', fileInfo,loginId,loginName,roomNo);		
+		}else{
+			console.log('뭐지???????????????');
+		}
+		
+	  });
+	  
+	  uploader.on('error', function(err) {
+	    $('.fmt-info').hide();
+		$('.fmt-upload').hide();
+		$('#fusPro').html('');
+		$('#fusPro').hide();
+		alert('파일전송 실패 : ' + err);
+	  });
+	  
+	  uploader.on('abort', function(fileInfo) {
+	    $('.fmt-info').hide();
+	    $('.fmt-upload').hide();
+		$('#fusPro').html('');
+		$('#fusPro').hide();
+		console.log('Aborted: ', fileInfo);
+	  });	  
+	  
+	  
+	  socket.emit('join:room',{
+		loginId : loginId,
+		loginName :loginName,
+		chatId : chatId,
+		chatNm : chatNm,
+		roomNo : roomNo		
+	  });	  
+	  
+	  socket.on('login message',function(msg){
+		$('#messages').append($('<p style="color:white"class="login">').text(msg));
+		$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+	  });
+	  
+      socket.on('my message', function (msg,myMsg,time,id,name) {
+		var newDay = time.split(' ')[0];
+		/*
+		//날짜바뀌면 날짜출력로직
+		if(today ==''){
+			$('#messages').append('<hr style="border: 1px solid white;" />');
+			$('#messages').append($('<p style="color:white"class="fd" data-date="'+newDay+'">').text(newDay));
+		}
+		*/
+		if(loginId==id){			
+			var myImg = '<img class="w3-right w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH me">'+myMsg+'</p>');			
+			$('#messages').append("<p id='"+msg+"' class='talk me m'>"+msg+"</p>");
+			$('#messages').append('<p class="talkH me">'+time.split(' ')[1]+'</p>');			
+			$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+		}else{
+			var myImg = '<img class="w3-left w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH other">'+myMsg+'</p>');	
+			$('#messages').append("<p class='talk other m'>"+msg+"</p>");
+			$('#messages').append('<p class="talkH other">'+time.split(' ')[1]+'<p>');
+			if(scrollStatus){
+				var newImg = '<img class="w3-left w3-middle w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px">';
+				var newCode = newImg;
+				//newCode += myImg+'<p class="talkH other">'+myMsg+'</p>';
+				newCode += '<div class="w3-tag w3-padding w3-round-large w3-center fmt-span"><br>'+msg+'</div>';
+				//newCode += '<p class="talkH other">'+time+'<p>';
+				$('#newMsg').html(newCode);
+				$('.idTag').html(name);
+				$('.fmt').fadeIn();
+			}else{
+				if( $(".fmt").css("display") != "none" ) {
+					$('.fmt').hide();
+				}
+				$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+			}
+
+			
+		}		
+		nowScrollTop = $('#chatLog').scrollTop();
+      });
+
+      socket.on('my iMessage', function (msg,myMsg,time,id,name) {
+		if(loginId==id){			
+			var myImg = '<img class="w3-right w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH me">'+myMsg+'</p>');			
+			$('#messages').append('<p class="talki mei m">'+msg+'</p>');
+			$('#messages').append('<p class="talkH me">'+time.split(' ')[1]+'</p>');			
+			$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+		}else{
+			var myImg = '<img class="w3-left w3-circle" src="/imgs/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH other">'+myMsg+'</p>');	
+			$('#messages').append('<p class="talki otheri m">'+msg+'</p>');
+			$('#messages').append('<p class="talkH other">'+time.split(' ')[1]+'<p>');
+			if(scrollStatus){
+				var newImg = '<img class="w3-left w3-middle w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px">';
+				var newCode = newImg;
+				//newCode += myImg+'<p class="talkH other">'+myMsg+'</p>';
+				newCode += '<div class="w3-tag w3-padding w3-round-large w3-center fmt-span"><br>'+msg+'</div>';
+				//newCode += '<p class="talkH other">'+time+'<p>';
+				$('#newMsg').html(newCode);
+				$('.idTag').html(name);
+				$('.fmt').fadeIn();
+			}else{
+				if( $(".fmt").css("display") != "none" ) {
+					$('.fmt').hide();
+				}
+				$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+			}		
+		}		
+		nowScrollTop = $('#chatLog').scrollTop();
+      });
+	  
+      socket.on('my imageMessage', function (msg,myMsg,time,id,name) {
+		if(loginId==id){			
+			var myImg = '<img class="w3-right w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH me">'+myMsg+'</p>');			
+			$('#messages').append('<p class="talki mei m">'+msg+'</p>');
+			$('#messages').append('<p class="talkH me">'+time.split(' ')[1]+'</p>');			
+			$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+		}else{
+			var myImg = '<img class="w3-left w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+			$('#messages').append('<hr style="border: 1px solid white;" />');			
+			$('#messages').append(myImg+'<p class="talkH other">'+myMsg+'</p>');	
+			$('#messages').append('<p class="talki otheri m">'+msg+'</p>');
+			$('#messages').append('<p class="talkH other">'+time.split(' ')[1]+'<p>');
+			if(scrollStatus){
+				var newImg = '<img class="w3-left w3-middle w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px">';
+				var newCode = newImg;
+				//newCode += myImg+'<p class="talkH other">'+myMsg+'</p>';
+				newCode += '<div class="w3-tag w3-padding w3-round-large w3-center fmt-span"><br>사진을 보냈습니다.</div>';
+				//newCode += '<p class="talkH other">'+time+'<p>';
+				$('#newMsg').html(newCode);
+				$('.idTag').html(name);
+				$('.fmt').fadeIn();
+			}else{
+				if( $(".fmt").css("display") != "none" ) {
+					$('.fmt').hide();
+				}
+				$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+			}		
+		}		
+		nowScrollTop = $('#chatLog').scrollTop();
+      });	  
+	  
+	  socket.on('firstMsg',function(data){
+		/*
+			DTFirst날짜를 받아서 최초 1회 hr을 뿌려준다.			
+		*/
+		if(data.length==0){
+			console.log('대화내용없음');
+			return;
+		}
+		
+		var firstDate = data[0].CHAT_DATE.split(' ')[0];
+		console.log('처음날짜 : '+firstDate);
+		$('#messages').append('<hr style="border: 1px solid white;" />');
+		$('#messages').append($('<p style="color:white"class="fd" data-date="'+firstDate+'">').text(firstDate));
+		console.log($('#chatLog').scrollTop());
+		pMap.set(firstDate,$('#chatLog').scrollTop());
+		for(var i in data){			
+			var secondDate = data[i].CHAT_DATE.split(' ')[0];
+			if(firstDate!=secondDate){
+				firstDate = data[i].CHAT_DATE.split(' ')[0];
+				$('#messages').append('<hr style="border: 1px solid white;" />');
+				$('#messages').append($('<p style="color:white"class="fd" data-date="'+firstDate+'">').text(firstDate));
+				pMap.set(firstDate,$('#chatLog').scrollTop()+300);
+				cCon.set(cCnt,firstDate);
+			}
+			var chatType = data[i].CHAT_TYPE;
+			var id= data[i].CHAT_ID;				
+			var name = data[i].CHAT_NAME;
+			var myMsg = data[i].CHAT_CONTENT;
+			var time = data[i].CHAT_DATE;
+			if(data[i].CHAT_ID == loginId){
+				if(chatType=='N'){
+					var myImg = '<img class="w3-right w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+					$('#messages').append('<hr style="border: 1px solid white;" />');			
+					$('#messages').append(myImg+'<p class="talkH me">'+id+' / '+name+'</p>');			
+					$('#messages').append("<p class='talk me m'>"+myMsg+"</p>");			
+					$('#messages').append('<p class="talkH me">'+time.split(' ')[1]+'</p>');								
+					cCon.set(cCnt,myMsg);
+				}else if(chatType=='I'){
+					var myImg = '<img class="w3-right w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+					$('#messages').append('<hr style="border: 1px solid white;" />');			
+					$('#messages').append(myImg+'<p class="talkH me">'+id+' / '+name+'</p>');			
+					$('#messages').append('<p class="talki mei m">'+myMsg+'</p>');
+					$('#messages').append('<p class="talkH me">'+time.split(' ')[1]+'</p>');
+				}
+			}else{
+				if(chatType=='N'){
+					var myImg = '<img class="w3-left w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+					$('#messages').append('<hr style="border: 1px solid white;" />');			
+					$('#messages').append(myImg+'<p class="talkH other">'+id+' / '+name+'</p>');			
+					$('#messages').append("<p class='talk other m'>"+myMsg+"</p>");			
+					$('#messages').append('<p class="talkH other">'+time.split(' ')[1]+'</p>');			
+					$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+					cCon.set(cCnt,myMsg);
+				}else if(chatType=='I'){
+					var myImg = '<img class="w3-left w3-circle" src="/imgs/userIcon/'+id+'" style="width:70px;height:70px"><br><br>';
+					$('#messages').append('<hr style="border: 1px solid white;" />');			
+					$('#messages').append(myImg+'<p class="talkH other">'+id+' / '+name+'</p>');	
+					$('#messages').append('<p class="talki otheri m">'+myMsg+'</p>');
+					$('#messages').append('<p class="talkH other">'+time.split(' ')[1]+'<p>');
+				}
+			}
+			$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+			$('.fmt').hide();
+			scrollStatus=false;
+			cMap.set(cCnt++,$('#chatLog').scrollTop()+100);
+		}
+		nowScrollPos = $('#chatLog').scrollTop();
+		console.log('완료후 : '+nowScrollPos);
+		console.log(cMap);
+		makeCalendar(pMap);
+	  });
+	  
+	  
+	  $('#chatLog').on('click',function(){
+		$('#iconDiv').hide();
+		$('#calendar').hide();
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+	  });
+	  
+	  $('body').keyup(function(key){
+		if(key.keyCode==27){
+			$('#calendar').hide();
+			$('#iconDiv').hide();
+			$('#search').hide();
+			$('#searchRes').hide();
+			$('#txt').val('');
+		}
+	  });
+	  $('#txt').keyup(function(key){
+		if(key.keyCode==13){
+			$('.sPrev').removeAttr("disabled");
+			$('.sNext').removeAttr("disabled");
+			if($('#txt').val().trim()==''){
+				alert('검색 내용을 입력해 주세요.');
+				return;
+			}else{
+				$('#searchRes').show();
+				var fTxt = $('#txt').val();
+				resMap = new Map();
+				console.log('cFind 클릭 : ',fTxt);
+				
+				var pSize=$('.m').length;
+				var j=0;
+				for(var i=0; i<pSize;i++){					
+					var content = cCon.get(i);					
+					if(content!=null && content.includes(fTxt)){
+						console.log('찾은 내용들 : '+content);
+						resMap.set(j++,cMap.get(i));
+					}
+				}
+				var firstSize = resMap.size!=0 ? 1 : 0;
+				var lastSize = resMap.size;				
+				$('#searchResult').html(firstSize+' / '+lastSize);
+				console.log(resMap);
+				if(lastSize==1){				
+					$('.sNext').attr("disabled","true");
+					$('.sPrev').attr("disabled","true");
+				}
+				if(lastSize>0){
+					fs=firstSize-1;
+					ls=lastSize-1;
+					ns=firstSize-1;
+					console.log('현재위치 : ',ns);
+					//searchMode=true;
+					$("html #chatLog").animate({scrollTop:resMap.get(fs)},300);
+					$('.sPrev').attr("disabled","true");
+				}else{
+					alert('검색과 일치하는 내용이 없습니다.');					
+					$('#search').hide();
+					$('#searchRes').hide();
+				}
+			}
+			$('#search').hide();
+			$('#txt').val('');
+		}
+	  });
+	  
+	  $('.sPrev').on('click',function(){		
+		var wantPos = ns--;
+		console.log('이동하려는 위치 : ',wantPos);
+		if(wantPos>fs){
+			$('#searchResult').html((wantPos+1)+' / '+(ls+1));
+			$("html #chatLog").animate({scrollTop:resMap.get(wantPos)},300);
+			$('.sNext').removeAttr("disabled");
+		}
+		if(wantPos==0){
+			ns++;
+			$('#searchResult').html(1+' / '+(ls+1));
+			$("html #chatLog").animate({scrollTop:resMap.get(wantPos)},300);
+			$('.sPrev').attr("disabled","true");
+			//$('.sNext').addClass('w3-disabled');
+			$('.sNext').removeAttr("disabled");
+			
+		}
+	  });
+	  $('.sNext').on('click',function(){
+		var wantPos = ++ns;
+		console.log('이동하려는 위치 : ',wantPos);
+		if(wantPos<ls){
+			$('#searchResult').html((wantPos+1)+' / '+(ls+1));
+			$("html #chatLog").animate({scrollTop:resMap.get(wantPos)},300);
+			$('.sPrev').removeAttr("disabled");
+		}
+		if(wantPos==ls){
+			ns--;
+			$('#searchResult').html((ls+1)+' / '+(ls+1));
+			$("html #chatLog").animate({scrollTop:resMap.get(wantPos)},300);
+			$('.sNext').attr("disabled","true");
+			$('.sPrev').removeAttr("disabled");
+		}
+	  });
+	  
+      $("#input").keyup(function(key){
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+		$('#calendar').hide();
+		$('#iconDiv').hide();
+        if(key.keyCode==13){
+		  var msg = $("#input").val();
+		  console.log(msg);
+		  if(msg.trim()=='' || msg==null){
+			return;
+		  }
+          socket.emit('message', msg);
+          $("#input").val("");
+        }
+      });
+	  
+
+	  $('#dFind').on('click',function(){
+	  $('#calendar').fullCalendar('option', 'height', 300);
+	  $('#search').hide();
+	  $('#searchRes').hide();
+	  $('#txt').val('');
+	  $('#iconDiv').hide();
+	  $('#calendar').show();
+	  
+	  //var nowScroll = $('#chatLog').scrollTop();
+	  //console.log(pMap);
+	  //for(var [key,value] of pMap){
+		//console.log(key + ' = ' + value);
+		//console.log(pMap.get(key));
+	  //}
+	  //console.log($("").attr('data-date'));      
+ 
+	  // offset은 절대 위치를 가져온다. offset.top을 통해 상단의 좌표를 가져온다.
+	  // position은 부모를 기준으로한 상대위치를 가져온다.
+	  //$("html #chatLog").animate({scrollTop:pMap.get('2018년01월14일')},300);
+	  
+	  //$('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+		  //var selObj = window.getSelection();
+		  //console.log('선택된 영역 : '+selObj);		  
+		//var sTxt = $('#input').val();
+		//$('#chatLog').contains
+		
+		//$('#'+sTxt).trigger('dbclick');
+		
+		/*
+        var offset = $("#" + sTxt).offset();
+
+        $('html, #chatLog').animate({scrollTop : offset.top}, 400);
+		  //var selRange = selObj.getRangeAt(0);	 
+		  //console.log('범위 : %s',selRange);	  
+		*/		
+		});
+		
+		//검색중
+		$('#cFind').on('click',function(){
+			$('#iconDiv').hide();
+			$('#calendar').hide();
+			$('#searchRes').hide();
+			$('#search').show();			
+			$('#txt').focus();
+		});
+		
+		
+	  
+	  $('#chatLog').delegate('.talk','dbclick',function(){
+		$(this).css('background-color','rgba( 255, 255, 255, 0.0 )');
+	  });
+	  
+	  $('#chatLog').delegate('.di','click',function(){
+	  $('#searchRes').hide();
+	  var id = $(this).attr('id');
+		console.log('다운 : ' + $(this).attr('id'));
+		window.open("/imgs/imgOpen/"+id+"/"+roomNo,"_blank","fullscreen=1");
+	  });
+      $("#btn").on('click', function(){
+		$('#search').hide();
+		$('#txt').val('');
+        $('#iconDiv').hide();	  
+		$('#calendar').hide();
+	  	var msg = $("#input").val();
+		console.log(msg);
+		if(msg=='' || msg.trim()==''){
+			return;
+		  }
+        socket.emit('message', msg);
+        $("#input").val("");
+      });
+	  
+	  $('#chatLog').scroll( function() {
+		  if ( nowScrollTop-$(this).scrollTop() > 200) {
+			scrollStatus=true;			
+		  } else {
+			scrollStatus=false;
+		  }
+	  });
+	  
+	  $('#icon').on('click',function(){
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+		$('#iconDiv').show();
+		$('#calendar').hide();
+	  });
+	  $('#file').on('click',function(){
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+		$('#iconDiv').hide();
+		$('#calendar').hide();
+	  })
+	  $('#iconDiv li').on('click',function(){
+		var id = $(this).attr('id');
+		var ext = id.substring(0,1);
+		console.log(ext);
+		if(ext=='g'){
+			var msg = '<img src="/imgs/gicons/'+id+'" style="width:100px;height:100px;">';
+			socket.emit('icon message', msg);
+			$('#iconDiv').hide();		
+		}else if(ext=='i'){
+			var msg = '<img src="/imgs/icons/'+id+'" style="width:100px;height:100px;">';
+			socket.emit('icon message', msg);
+			$('#iconDiv').hide();
+		}			
+	  });
+	  
+	  $('#chatLog').delegate('.fd','click',function(){
+		console.log($(this).data('date'));
+	  });
+	  
+      $(".close").click(function(){
+        $("#myAlert").alert("close");
+      });
+	  
+	  $('#cResF').on('click',function(){
+		$('#dropModal').css('display','none');
+	  });
+	  $('#cResT').on('click',function(){
+	    $('#dropModal').css('display','none');
+		var fileNames = sendFiles.map(function (file) { return file.name });
+		var tCnt = sendFiles.length;
+		var sCnt =0;
+		var fCnt =0;
+		var resTxt = "";
+		for(var i in sendFiles){
+			var d = new Date();			
+			if(sendFiles[i].size>30004304){
+				//console.log(sendFiles[i].name + '[전송실패 30MB초과] ');
+				resTxt += sendFiles[i].name + '[전송실패 30MB초과]';
+				fCnt++;
+			}else{
+				var file = [sendFiles[i]];
+				//console.log(files[i].name + ' : 보내기전');
+				var uploadIds = uploader.upload(file, {
+					data: { "oName" : fileNames[i],
+							"fName" : 'PMS_'+roomNo+d.getFullYear()+fileNames[i],
+							"fImg" : "false"
+						  }
+				});						
+				resTxt += sendFiles[i].name + '[전송 완료] ';
+				//console.log(uploadIds);
+				//console.log(sendFiles[i].name + ' : 보내기후');
+				sCnt++;						
+			}
+		}
+		var cTxt = '<h4>[ 요청 : '+tCnt+' ] [ 성공 : '+sCnt+'  실패 : '+fCnt+' ]';
+		$('#iResCnt').html(cTxt);
+		$('#iRes').html(resTxt);
+		$('.fmt-info').slideDown();
+		$('.fmt-info').delay(2500).slideUp();
+	  });
+	/*  
+	socket.on('image', function(data) {
+		var uint8Arr = new Uint8Array(data.buffer);
+		var binary = '';
+		for (var i = 0; i < uint8Arr.length; i++) {
+			binary += String.fromCharCode(uint8Arr[i]);
+		}
+		var base64String = window.btoa(binary);
+		console.log(base64String);
+		var img = new Image();
+		img.src = 'data:image/png;base64,' + base64String;
+		console.log(img);
+		$('#test').append('<img src="'+img.src+'">');
+	});
+	*/
+	  $('#input').on('click',function(){
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+		$('#calendar').hide();
+		$('#iconDiv').hide();
+	  });
+	  $('.fmt').on('click',function(){
+		$('#search').hide();
+		$('#searchRes').hide();
+		$('#txt').val('');
+		$('#calendar').hide();
+	    $('#iconDiv').hide();
+	    $('#chatLog').scrollTop($('#chatLog')[0].scrollHeight);
+		$('.fmt').fadeOut();
+	  });	  
+	  
+	  $('#file').on('change',function(f){
+	    //var fileReader  = new FileReader();				
+	    var file = f.target.files[0];
+		//var extension = file.substr((file.lastIndexOf('.') +1));		
+		//console.log('확장자명 : '+extension);
+		//var stream = ss.createStream();
+		
+		var fileName = file.name;
+		var fileType = file.type;
+		console.log(fileType);
+		var fileSize = file.size;
+		//var fileExt = fileName.split('.')[1];
+		//console.log(fileExt);
+		//console.log(fileType);
+		//if(fileType==''){ alert('지원하지 않는 파일 입니다.');return;}
+		if(fileSize>30004304){alert('30M 이하만 전송 가능합니다.'); return;}
+		var fileEl = document.getElementById('file');
+		var d = new Date();
+		//var chatIndex = 0;
+		var uploadIds = uploader.upload(fileEl, {
+			data: { 
+					"oName" : fileName,
+					"fName" : 'PMS_'+roomNo+d.getFullYear()+fileName,
+					"fImg" : "false"
+				  }
+		});		
+	  });
+	  $('.fmt-loader').hide();
+	  $('#file').val('');
+	  
+	});	
+    </script>
+	
+	
+	<style>
+	.fmt{
+		z-index:1;
+		position:absolute;
+		width:480px;
+		height:120px;
+		bottom:380px;
+		margin-top:30px;
+		background-color: rgba( 255, 255, 255, 0.0 );			
+	}
+	.fmt-upload{
+		z-index:1;
+		position:absolute;
+		width:140px;
+		height:20px;
+		bottom:10px;
+		right:10px;
+		background-color: rgba( 255, 255, 255, 0.0 );			
+	}
+	.fmt-icon{
+		z-index:1;
+		position:absolute;
+		width:100px;
+		height:300px;
+		bottom:100px;
+		right:360px;
+		background-color: rgba( 255, 255, 255, 1.0 );
+	}
+	li:hover{
+		background-color: yellow;
+	}
+	.fmt-icon2{
+		z-index:1;
+		position:absolute;
+		width:100px;
+		height:300px;
+		bottom:100px;
+		right:265px;
+		background-color: rgba( 255, 255, 255, 1.0 );
+	}
+	.fmt-icon3{
+		z-index:1;
+		position:absolute;
+		width:100px;
+		height:300px;
+		bottom:100px;
+		right:165px;
+		background-color: rgba( 255, 255, 255, 1.0 );
+	}	
+	.fmt-success{
+		z-index:1;
+		position:absolute;
+		width:30px;
+		height:30px;
+		bottom:15px;
+		right:60px;
+		background-color: rgba( 255, 255, 255, 0.0 );			
+	}
+	.fmt-span{
+		width:377px;
+		height:80px;
+		color:black;
+		background-color: rgba( 255, 255, 255, 0.75 );
+	}
+	.idTag{
+		z-index:2;
+		position:absolute;
+		font-size:13px;
+		color:black;
+		opacity:0.75;
+		top:73px;
+		left:15px;
+	}
+	.fmt-confirm{
+		z-index:1;
+		position:absolute;
+		top:0px;
+	}
+	.fmt-info{
+		z-index:1;
+		position:absolute;
+		top:0px;
+	}
+	.fmt-loader{
+		z-index:1;
+		position:absolute;
+		top:150px;
+		left:60px;
+	}
+	.di{
+		width:150px;
+		height:150px;
+	}
+	#calendar {
+		z-index:1;		
+		absolute:true;	
+		margin: 0 auto;
+		background-color:#99dfe1;
+		bottom: 150px;		
+	}
+	.clickDay{
+		font-size:1.3em;
+		background-color:pink;
+	}
+	.cHelp{
+		z-index:2;		
+		absolute:true;	
+		margin: 0 auto;
+		max-width: 300px;
+		right:130px;
+		bottom: 350px;		
+	}
+	.search{
+		z-index1;
+		top:0px;
+		absolute:true;
+		max-width:500px;
+	}
+	.sPrev{
+		background-color:white;
+	}
+	.sNext{
+		background-color:white;
+	}
+	#searchRes{
+		padding:10px;
+		width:593px;
+		background-color: rgba( 255, 255, 255, 0.3 );			
+	}
+	</style>
+  </head>
+  <body>	  
+	  <div id="searchDiv"class="search">
+		  <div id="search"class="input-group" style="display:none">
+			<span class="input-group-addon"><i class="fa fa-search"></i></span>
+			<input id="txt" type="text" class="form-control" name="txt" placeholder="검색 내용을 입력해 주세요.">
+		  </div>
+		  <div id="searchRes" class="w3-center" style="display:none">
+			<span><i class="fa fa-search"></i></span>
+			<span class="w3-center"id="searchResult" style="margin-right:20px">1/5</span>
+			<button class="w3-button w3-circle sPrev"><i class="w3-center fa fa-arrow-up"></i></button>
+			<button class="w3-button w3-circle sNext"><i class="w3-center fa fa-arrow-down"></i></button>
+		  </div>
+	  </div>	  
+  
+	<div id="help" class="w3-bottom alert alert-info cHelp" style="display:none">
+	  <strong>도움말</strong> <br><br>
+	  색칠된 날짜를 클릭 해보세요!!
+	</div>
+	<div id='calendar' class='w3-bottom' style="display:none;"></div>
+	<div class="fmt-loader w3-center"><img src="/imgs/t/loader.gif"></div>
+	
+
+	
+	<div class="container fmt-info" style="display:none;height:300px">
+	  <div class="alert alert-success alert-dismissible" style="height:180px;width:540px" id="myAlert">
+		<a href="#" class="close">&times;</a>
+		<div class="w3-center"><h3>파일 전송 결과</h3></div>
+		<div id="iResCnt"><h4>[ 요청 : 0 ] [ 성공 : 0  실패 : 0 ]</h4></div>
+		<p id="iRes"></p><br>	
+	  </div>
+	</div>
+	<input type="hidden" id="loginId" value="<%=loginId%>">
+	<input type="hidden" id="loginName" value="<%=loginName%>">
+	<input type="hidden" id="chatId" value="<%=chatId%>">
+	<input type="hidden" id="chatNm" value="<%=chatNm%>">
+	<input type="hidden" id="roomNo" value="<%=roomNo%>">
+    <div class="background" >
+	<div id="chatLog" class="chat_log w3-animate-top" style="height:600px;width:100%;overflow:auto;border:5px cyan;padding:1%;margin-bottom:10px">
+		<div class ="msgbox" id="messages"></div>		
+	</div>
+	
+	<div class="fmt w3-top">
+		<div class="w3-center">
+			<div id="newMsg" style="opacity:0.6"></div>
+		</div>
+		<div class="idTag"></div>		
+	</div>	
+	<div id="iconDiv" style="display:none">
+		<div class="fmt-icon">
+			<ul class="w3-ul">
+					<li id="icon1"><img src="/imgs/icons/icon1" style="width:75px;height:75px;"></li>
+					<li id="gicon6"><img src="/imgs/gicons/gicon6" style="width:75px;height:75px;"></li>
+					<li id="gicon3"><img src="/imgs/gicons/gicon3" style="width:75px;height:75px;"></li>
+			</ul>	
+		</div>
+		<div class="fmt-icon2">
+			<ul class="w3-ul">
+					<li id="gicon4"><img src="/imgs/gicons/gicon4" style="width:75px;height:75px;"></li>
+					<li id="gicon5"><img src="/imgs/gicons/gicon5" style="width:75px;height:75px;"></li>
+					<li id="gicon2"><img src="/imgs/gicons/gicon2" style="width:75px;height:75px;"></li>
+			</ul>	
+		</div>
+		<div class="fmt-icon3">
+			<ul class="w3-ul">
+					<li id="gicon9"><img src="/imgs/gicons/gicon9" style="width:75px;height:75px;"></li>
+					<li id="gicon8"><img src="/imgs/gicons/gicon8" style="width:75px;height:75px;"></li>
+					<li id="gicon7"><img src="/imgs/gicons/gicon7" style="width:75px;height:75px;"></li>
+			</ul>	
+		</div>
+	</div>
+	
+	
+	<div class="fmt-upload w3-section" style="display:none;">
+		<div id="fusPro" class="w3-container w3-padding-small w3-center" style="width:0%;background-color:white"></div>
+	</div>
+	<div class="fmt-success" style="display:none"><img src="/imgs/t/success.gif" style="width:30px;height:30px"></div>
+
+	
+	<hr style="border:1px solid white">
+		<input id="input" class="w3-animate-left msg" type="text"/>				
+		<button id = "btn" class="w3-animate-right send" type="button"><span style="color:white">전송</span></button>		
+		<div class="w3-bar">
+		  <input id="file" type="file" name="file" style="display:none;" multiple>		  
+		  <button class="w3-bar-item w3-button w3-animate-bottom" onclick="document.all.file.click();"><span style="color:white">파일첨부</span></button>
+		  <button id="icon"class="w3-bar-item w3-button w3-animate-bottom"><span style="color:white">이모티콘</span></button>
+		  <button id="dFind" class="w3-bar-item w3-button w3-animate-bottom"><span style="color:white">날짜검색</span></button>		  
+		  <button id="cFind" class="w3-bar-item w3-button w3-animate-bottom"><span style="color:white">채팅검색</span></button>
+		  
+		</div>		
+    </div>
+	
+	  <div id="dropModal" class="w3-modal">
+		<div class="w3-modal-content w3-animate-top w3-card-4">
+		  <header class="w3-container w3-white"> 
+			<span onclick="document.getElementById('dropModal').style.display='none'" 
+			class="w3-button w3-display-topright">&times;</span>
+			<div class="w3-center" style="padding:10px"><h2>파일 전송 알림</h2></div>
+		  </header>
+			<div class="w3-container">
+			  <ul id="cRes" class="w3-ul">
+				<li class="w3-blue">다음 파일을 전송합니다.</li>
+			  </ul>
+			</div>
+		  <footer class="w3-container w3-white">
+		  <div class="w3-center" style="padding:10px">
+			<button id="cResT" class="w3-btn w3-ripple w3-yellow">전송</button>
+			<button id="cResF" class="w3-btn w3-ripple w3-white">취소</button>			
+		  </div>			
+		  </footer>
+		</div>
+	  </div>
+	<script>
+	window.onbeforeunload = function(){
+	  var endRoomNo = $('#roomNo').val();
+	  $('#endForChat',opener.document).val(endRoomNo);
+	  $(opener.location).attr("href", "javascript:deletePopupWindow();");
+	  return;
+	}
+	</script>	
+	
+  </body>
+
+</html>

@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html>
+<title><%title%></title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<link rel="stylesheet" href="/js/jqueryCustom/jquery-ui.min.css">
+
+<script defer src="https://use.fontawesome.com/releases/v5.0.6/js/all.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script lang="javascript" src="/js/pptxgen.js"></script>
+<script lang="javascript" src="/js/jszip.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+	var slideArr = [];
+	var mode = '';
+	var update;
+	var updatePos;
+	var lineArr = [];
+	var thisPos;
+	var prev = {};
+	var redoArr = [];
+	var nextCnt;
+	var writeMode = "<%=mode%>";
+	var loginId = "<%=mem_id%>";
+	var loginName = "<%=mem_name%>";
+	var docNo="<%=docNo%>"
+	var proNo="<%=proNo%>"
+	var title = "<%=title%>";
+	var docNo;
+	var fileName = "<%=fileName%>";
+	var socket;
+	console.log(mode);
+	$(function(){
+		console.log('접속프로젝트넘버 : ' + $('#docNo').val());
+		if(writeMode=='write'){
+			$.ajax({
+				url:'/nextCnt',
+				type:'post',
+				dataType: 'json',
+				async:false,
+			}).done(function(data){
+				console.log(data);
+				nextCnt = data.result;
+				$('#slideTitle li').text('제목없는ClassDo'+nextCnt);
+				$('#docNo').val(nextCnt);
+				$('#slideUser li').text(loginId);
+			});
+		}else if(writeMode='edit'){
+			$('#slideTitle li').text(title);			
+			socket = io('http://'+location.host);
+			
+			socket.emit('join:slide',{
+					loginId : loginId,
+					loginName :loginName,
+					docNo : docNo,
+					proNo : proNo
+			});	  
+		  
+			socket.on('slideIn',function(msg){
+				$('#slideUser li').text(msg);
+			});	
+			
+			socket.on('slide changeTitle',function(msg){
+				alert('제목이 변경 되었습니다.');
+				$('#slideTitle li').text(msg);				
+			});
+			
+			socket.on('slide create',function(data){
+				$('#slideContent td[data-pos='+data.pos+']').html(data.code);
+			});	
+			
+			socket.on('slide remove',function(d){
+				$('#slideContent td[data-pos='+d.updatePos+']').html('');
+				$('#slideContent td[data-pos='+d.updatePos+']').css('cursor','');
+				$('#updateModal').css('display','none');						
+				updateToUpdateMode();						
+				clearLines(d.ctx,d.updatePos,d.c);
+			})
+			
+			
+		}
+
+			
+		$('#slideTitle li').click(function(){
+			var title = prompt('제목을 입력해 주세요.',$(this).text());
+			if(title!=null && title.trim()!=''){
+				$(this).text(title);
+			}
+			
+			if(socket!=null){
+				socket.emit('slide changeTitle',title);
+			}
+		});
+		$("#inline img").draggable({ revert: true});
+		
+		createTable();
+		
+		var table = $('#slideContent');
+		createCanvas(table);
+		
+		var c = document.getElementById("canvas");
+		console.log(c.width + '/' + c.height);
+		var ctx = c.getContext("2d");		
+		
+		if(writeMode=='edit'){ 
+			$('#fileName').val(fileName);
+			$('#docNo').val(docNo);
+			readFile(fileName);
+		}
+		
+		
+		
+		
+		$('#slideContent td').mouseover(function(e){			
+			thisPos = $(this).data('pos');
+			console.log('mouseover thisPos => ',thisPos);
+			console.log('mouseover Mode=>',mode);
+			if(mode=='draw'){
+				$(this).css('cursor', 'pointer' );
+				//$('#slideContent td[data-pos='+thisPos+']').css('cursor','not-allowed');
+				return;
+			}
+			
+			if(mode==''){
+				var length = $('ul',this).length;
+				if(length>0){				
+					$(this).css('cursor', 'zoom-in' );
+					mode='update';
+				}
+			}
+
+		});
+
+		
+		$('#slideContent ul').mouseout(function(){
+			if(mode!='update'){
+				return;
+			}
+			var classInfo = $('ul',this).length;
+			if(classInfo>0){
+				$(this).css('cursor', 'not-allowed');
+				mode='';
+				return;
+			}	
+		});
+		
+		
+		$('#undo').on('click',function(){
+			//c = document.getElementById("canvas");
+			//ctx = c.getContext("2d");
+			ctx.clearRect(0,0,c.width,c.height);
+			ctx.beginPath();
+			//ctx.restore();			
+			console.log('--삭제전--');
+			console.log(lineArr);
+			lineArr.splice(lineArr.length-1,1);
+			console.log('--삭제후--');
+			console.log(lineArr);
+			$.each(lineArr,function(i,v){				
+				console.log(i+"번째");
+				console.log(v);
+				ctx.moveTo(v.x1,v.y1);
+				ctx.lineTo(v.x2,v.y2);
+				ctx.stroke();
+			})
+			clearEffectLine();
+			clearEffectLine1();
+		});
+		
+		$('#redo').on('click',function(){
+			clearEffectLine();
+			clearEffectLine1();
+			if(redoArr.length>0){
+				if(redoArr[0].line!=''){
+					console.log(redoArr);
+					console.log(' line 전용 ');
+				}else if(redoArr[0].tag!=''){
+					console.log(redoArr);
+					console.log(' tag 전용 ');
+					$('#slideContent td[data-pos='+redoArr[0].pos+']').html(redoArr[0].tag);
+					$.each(redoArr,function(i,v){
+						lineArr.push(v.line);
+					});
+					ctx.clearRect(0,0,c.width,c.height);
+					ctx.beginPath();	
+					$.each(lineArr,function(i,v){				
+						//console.log(i+"번째");
+						//console.log(v);
+						ctx.moveTo(v.x1,v.y1);
+						ctx.lineTo(v.x2,v.y2);
+						ctx.stroke();
+					})
+					redoArr = [];
+					
+				}
+			}
+
+		});
+		
+		$('#home .homeItem').on('mousedown',function(){
+			console.log("$('#home img').on('mousedown',function(){");
+			if($(this).attr('id')!='help'){
+				clearEffect();
+				$.each($('#slideContent ul'),function(i,v){
+					v.className+=" w3-disabled";
+				});
+			}
+			mode = $(this).attr('id');
+			//console.log(mode);
+		});
+		
+		
+		$('#home .homeItem').on('mouseup',function(e){
+			if(e.pageX<280 || e.pageY<120){
+				console.log('dzdzd');
+				clearEffect();
+				mode='';
+				return;
+			}
+			console.log("$('#home img').on('mouseup',function(){");
+			var m = mode;
+			var tp = thisPos;
+			console.log('mouseUp Mode=> '+m);
+			console.log('mouseUp thisPos=>',tp);
+			var length = $('#slideContent td[data-pos='+tp+']>ul' ).length;
+			console.log('마우스놧는데',length);
+			if(length>0){
+				clearEffect();
+				mode='';
+				return;
+			}
+			switch(mode){
+				case 'package':{						
+					console.log('모드 => ',mode);					
+					var pCode ='';
+						pCode+='<ul class="w3-ul w3-hoverable package">';
+						pCode+='<li class="w3-padding-small w3-center w3-border" style="background-color:orange;" data-type="package">title</li>';
+						pCode+='<li class="w3-padding-small w3-border w3-white" data-type="name">package</li>';						
+						pCode+='</ul>';
+					$('#slideContent td[data-pos='+tp+']').html(pCode);
+					if(socket!=null){
+						socket.emit('slide create',{code:pCode,pos:tp});
+					}
+					clearEffect();
+					mode='';
+					break;
+				}
+				
+				case 'class':{
+					var cCode ='';
+						cCode+='<ul class="w3-ul w3-border w3-hoverable class">';
+						cCode+='<li class="w3-padding-small w3-center w3-border" style="background-color:lightgreen" data-type="class">Class</li>';
+						cCode+='<li class="w3-padding-small w3-border w3-white" data-type="name">attribute</li>';
+						cCode+='<li class="w3-padding-small w3-border w3-white" data-type="name">method</li>';
+						cCode+='</ul>';
+					console.log('모드 => ',mode);
+					$('#slideContent td[data-pos='+tp+']').html(cCode);
+					if(socket!=null){
+						socket.emit('slide create',{code:cCode,pos:tp});
+					}
+					clearEffect();
+					mode='';
+					break;
+				}
+
+				case 'interface':{
+					var iCode ='';
+						iCode+='<ul class="w3-ul w3-border w3-hoverable interface">';
+						iCode+='<li class="w3-padding-small w3-center" style="background-color:lightblue" data-type="interface">[interface]<br>Class</li>';
+						iCode+='<li class="w3-padding-small  w3-white" data-type="name">method</li>';
+						iCode+='</ul>';
+					$('#slideContent td[data-pos='+tp+']').html(iCode);
+					if(socket!=null){
+						socket.emit('slide create',{code:iCode,pos:tp});
+					}
+					clearEffect();
+					mode='';
+					break;
+				}				
+				default:{
+					console.log('리턴');
+					clearEffect();
+					mode='';
+					break;
+				}
+			}			
+		});
+		
+		
+		//드래그	 드로우 약 w:950  h:700
+		$('#inline #rightLine').on('click',function(e){
+			if(mode=='draw1'){
+				clearEffectLine();
+				clearEffectLine1();
+				mode='';
+				return;
+			}else{
+				mode = 'draw1';
+				clearEffectLine();
+				clearEffectLine1();
+				$.each($('#slideContent ul'),function(i,v){
+					v.className+=" w3-border w3-border-green";
+				});
+			}
+
+		});
+		
+		
+		$('#inline img').on('mouseup',function(e){
+
+		});
+
+		// 282, y: 119}  1234, y: 817}		
+		
+
+		
+		$('#slideContent').delegate('td','click',function(e){
+			console.log('slideContenttd Click => mode : ',mode);
+			if(mode=='draw1'){
+				console.log('draw1');
+				$.each($('#slideContent ul'),function(i,v){
+					v.className+=" w3-border w3-border-blue";
+				});
+				prev.x1 = (e.pageX-280);
+				prev.y1 = (e.pageY-120);
+				prev.pos1 = thisPos;			
+				ctx.moveTo( (e.pageX-280),(e.pageY-120) );
+				clearEffectLine1();
+				mode='draw';
+				return;
+			}else if(mode=='draw'){				
+				var pos = $(this).data('pos');
+				console.log(pos);
+				prev.x2 = (e.pageX-280);
+				prev.y2 = (e.pageY-120);
+				prev.pos2 = pos;
+				ctx.lineTo( (e.pageX-280),(e.pageY-120));
+				console.log(prev.x2 + '/' + prev.y2);				
+				ctx.lineWidth = 5;				
+				lineArr.push(prev);
+				console.log(prev);
+				ctx.stroke();
+				socket.emit('slide draw',prev);
+				mode='';
+				console.log(lineArr);
+				prev = {};
+				clearEffectLine();
+				return;
+			}
+			
+			if(mode=='update'){
+				var classInfo = $('ul',this).length;			
+				if(classInfo==0){
+					console.log('리턴');
+					clearEffect();
+					mode='';
+					return;
+				}				
+				updatePos = $(this).data('pos');				
+				update = $(this).html();				
+				update = update.replace('w3-ul ','w3-ul update ');
+				$('#updateDiv').html(update);
+				$('#updateModal').css('display','block');
+			}else{
+				clearEffect();
+			}			
+		});
+		
+		
+		//수정모드
+		$('#updateDiv').delegate('li','dblclick',function(){
+			var type=$(this).data('type');
+			var change = prompt('수정하실 내용을 입력해 주세요',$(this).text());
+			if(change!=null && change!=''){
+				$(this).text(change);
+				update = $('#updateDiv').html();
+			}
+		});
+		
+		$('#updateDiv').delegate('li','mouseover',function(){
+			if(mode=='delete'){
+				$(this).css('cursor','wait');
+			}else{
+				$(this).css('cursor','pointer');
+			}
+		});		
+		
+		$('#updateDiv').delegate('li','click',function(){
+			if(mode=='delete'){
+				var type = $(this).data('type');
+				if(type=='name'){					
+					$(this).remove();
+					update = $('#updateDiv').html();
+				}else{
+					alert('속성만 삭제 가능합니다.');
+				}
+				
+			}
+		});
+		
+		$('#updateContent').delegate('li','click',function(){
+			var type = $(this).data('type');
+			switch(type){
+				case 'add':{
+					if(mode=='delete'){
+						alert('모드를 변경해주세요.');
+						return;
+					}
+					console.log('add');
+					var code ='<li class="w3-padding-small w3-white w3-border" data-type="name">method</li>';
+					$('.update').append(code);
+					update = $('#updateDiv').html();
+					console.log(update);
+					break;
+				}
+				case 'del':{
+					if(mode=='delete'){
+						updateToUpdateMode();											
+					}else{
+						updateToDeleteMode();					
+					}
+					break;
+				}
+				case 'delAll':{
+					var title = $('#updateDiv ul').children().first().text();
+					if(confirm('[ ' + title+' ] 삭제 하시겠습니까?')){
+						var tag = $('#slideContent td[data-pos='+updatePos+']').html();
+						redoArr.push({tag:tag,line:'',pos:updatePos});
+						$('#slideContent td[data-pos='+updatePos+']').html('');
+						$('#slideContent td[data-pos='+updatePos+']').css('cursor','');
+						$('#updateModal').css('display','none');						
+						updateToUpdateMode();						
+						clearLines(ctx,updatePos,c);
+						socket.emit('slide remove',{updatePos:updatePos,ctx:ctx,updatePos:updatePos,c:c});
+						alert('삭제 되었습니다.');
+					}
+					break;
+				}
+			}
+		});
+		
+		$('#btnUpdateModalClose').on('click',function(){
+			update =null;
+			updatePos=null;
+			$('#updateModal').css('display','none');
+			updateToUpdateMode();
+			console.log('close');
+		});
+		
+		$('#btnUpdateModalSave').on('click',function(){
+			$('#updateModal').css('display','none');
+			console.log(updatePos);
+			$('#slideContent td[data-pos='+updatePos+']').html(update);
+			var length = $('#slideContent .update').length;
+			if(length>0){
+				$('#slideContent .update').removeClass('update');
+			}
+			console.log(length);
+			updateToUpdateMode();
+		});
+		
+		
+		
+	
+		
+		$('#file').on('change',function(f){						
+			var file = f.target.files[0];		
+			var fileNm = file.name;
+			var fileExt = fileNm.split('.')[1];
+			console.log(fileExt);
+			if(fileExt!='do'){
+				alert('.do 파일만 이용 가능합니다.');
+				return;
+			}else{
+				$('#slideContent').html('');
+				createTable('slideContent');
+			}			
+			$.ajax({
+				url:'/openSlide',
+				type:'post',
+				dataType: 'json',
+				async:false,
+				data : {fileNm : fileNm}
+			}).done(function(data){
+				console.log('openFile----');
+				console.log(data);
+				$.each(JSON.parse(data),function(i,v){			
+					var pos = v.pos;
+					var code = v.code;
+					$('#slideContent td[data-pos='+pos+']').html(code);			
+				});
+			});
+			$('#file').val('');
+		});
+		
+		
+		$('#exit').on('click',function(){
+			if(confirm('정말 종료 하시겠습니까?')){
+				window.close();
+			}
+		});
+
+		//사이드바
+		$('#slideList a').on('click',function(){
+			var type = $(this).attr('id');
+			switch(type){
+				case 'save' :{
+					console.log('저장버튼');
+					var jsonArr = [];
+					var title = $('#slideTitle li').text();
+					var docNo = $('#docNo').val();
+					var proNo = $('#proNo').val();
+					var loginId = $('#mem_id').val();
+					$.each($('#slideContent ul'),function(i,v){
+						var pos = $(this).parent().data('pos');
+						console.log(pos);
+						var code = $(this).clone().wrapAll("<div/>").parent().html();
+						var json = {
+							pos : pos,
+							code : code
+						};
+						jsonArr.push(json);
+					});
+					
+					console.log(jsonArr);
+					console.log(lineArr);
+					  $.ajax({
+							url:'/createSlide',
+							type:'post',
+							dataType: 'json',
+							data : {data:JSON.stringify({jsonArr:jsonArr,lineArr:lineArr}),data2:JSON.stringify({title :title ,docNo:docNo,proNo:proNo,mem_id:loginId})}
+						}).done(function(data){
+							if(data.result>0){
+								alert('저장성공');
+							}
+						});
+					break;
+				}
+				case 'saveToPPT':{
+					console.log('PPT저장');
+					var pptx = new PptxGenJS();
+					pptx.setLayout('LAYOUT_WIDE');
+					var slide = pptx.addNewSlide();					
+					$.each($('#slideContent td'),function(i,v){
+						var childEl = v.getElementsByClassName("package");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							console.log(pos);
+							//0,1 => 반대로
+							var code = $(this).html();
+							var x = pos.split('_')[0]*1;
+							var y = pos.split('_')[1]*1;
+							console.log(this);
+							$.each($('li',this),function(i,v){																
+								var type = $(this).data('type');
+								console.log($('li[data-type='+type+']',this));
+								console.log(type);
+								var content = $('li[data-type='+type+']',this).prevObject[0].innerText;
+								if(type=='package'){												
+									console.log(pos + '의 x =>' + x);
+									console.log(pos + '의 y =>' + y);
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'FFCC99' });
+									y+=0.5;
+								}else if(type=='name'){									
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'DDDDDD' });
+									y+=0.5;
+								}
+							});
+						}
+
+						childEl = v.getElementsByClassName("class");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							console.log(pos);
+							//0,1 => 반대로
+							var code = $(this).html();
+							var x = pos.split('_')[0]*1;
+							var y = pos.split('_')[1]*1;
+							console.log(this);
+							$.each($('li',this),function(i,v){																
+								var type = $(this).data('type');
+								console.log(type);
+								var content = $('li[data-type='+type+']',this).prevObject[0].innerText;
+								if(type=='class'){												
+									console.log(pos + '의 x =>' + x);
+									console.log(pos + '의 y =>' + y);
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'66FF66' });
+									y+=0.5;
+								}else if(type=='name'){									
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'DDDDDD' });
+									y+=0.5;
+								}
+							});
+						}
+						
+						childEl = v.getElementsByClassName("interface");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							console.log(pos);
+							//0,1 => 반대로
+							var code = $(this).html();
+							var x = pos.split('_')[0]*1;
+							var y = pos.split('_')[1]*1;
+							console.log(this);
+							$.each($('li',this),function(i,v){																
+								var type = $(this).data('type');
+								console.log(type);
+								var content = $('li[data-type='+type+']',this).prevObject[0].innerText;
+								if(type=='interface'){												
+									console.log(pos + '의 x =>' + x);
+									console.log(pos + '의 y =>' + y);
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'3366FF' });
+									y+=0.5;
+								}else if(type=='name'){									
+									slide.addText(content, { x:(x*1.7)+0.1, y:y+0.1,w:'9%',h:0.5, align:'c',font_size:6, font_face:'Arial', color:'000000', fill:'DDDDDD' });
+									y+=0.5;
+								}
+							});
+						}
+					});
+					pptx.setLayout({ name:'TEST1', width:17, height:9 });
+					pptx.save('sibal');
+					break;
+				}
+				
+				case 'saveToDownload':{
+					console.log('다운로드버튼');
+					var jsonArr = [];
+					$.each($('#slideContent td'),function(i,v){
+						var childEl = v.getElementsByClassName("package");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							var code = $(this).html();
+							var json = {
+								pos : pos,
+								code : code
+							};
+							jsonArr.push(json);
+						}
+						childEl = v.getElementsByClassName("class");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							var code = $(this).html();
+							var json = {
+								pos : pos,
+								code : code
+							};
+							jsonArr.push(json);
+						}
+						childEl = v.getElementsByClassName("interface");
+						if(childEl.length>0){
+							var pos = $(this).data('pos');
+							var code = $(this).html();
+							var json = {
+								pos : pos,
+								code : code
+							};
+							jsonArr.push(json);
+						}
+					});
+					$('#data').val(JSON.stringify(jsonArr));
+					$('#saveForm').submit();
+					break;
+				}
+			}
+		});
+
+		//jquery끝
+	});
+	
+function createTable(){
+	var code = '';
+	for(var i=0;i<7;i++){
+		code+="<tr class='w3-center'>";
+		for(var j=0;j<10;j++){
+			//console.log(i+','+j);
+			code+='<td class="w3-center" data-pos="'+j+'_'+i+'"></td>';
+		}
+		code+="</tr>";
+	}
+	$('#slideContent').html(code);
+}
+
+function readFile(fileName){
+	$.ajax({
+		url:'/readSlide',
+		type:'post',
+		dataType: 'json',
+		data : {fileName:fileName}
+	}).done(function(data){
+		//console.log('readFile----');
+		//console.log(data);
+		var json = JSON.parse(data);
+		$.each(json.jsonArr,function(i,v){
+			var pos = v.pos;
+			var code = v.code;
+			$('#slideContent td[data-pos='+pos+']').html(code);			
+		})
+		$.each(json.lineArr,function(i,v){
+			console.log(v);
+			var c = document.getElementById("canvas");
+			var ctx = c.getContext("2d");
+			//console.log(i+"번째");
+			//console.log(v);
+			ctx.moveTo(v.x1,v.y1);
+			ctx.lineTo(v.x2,v.y2);
+			ctx.lineWidth = 5;
+			ctx.stroke();
+			var prev = {x1 : v.x1, x2 : v.x2, y1 : v.y1, y2 : v.y2, pos1:v.pos1, pos2:v.pos2};
+			lineArr.push(prev);
+		})
+	});
+}
+
+function clearEffect(){
+	$.each($('#slideContent ul'),function(i,v){
+			v.className = v.className.replace(" w3-disabled","");
+	});
+}
+
+$.fn.outerHTML = function() {
+    var el = $(this);
+    if( !el[0] ) return "";
+ 
+    if (el[0].outerHTML) {
+        return el[0].outerHTML;
+    } else {
+        var content = el.wrap('<p/>').parent().html();
+        el.unwrap();
+        return content;
+    }
+}
+
+function updateToDeleteMode(){
+	$('#updateHeader').removeClass('w3-green');
+	$('#updateHeader').addClass('w3-red');
+	$('#updateFooter').removeClass('w3-green');
+	$('#updateFooter').addClass('w3-red');
+	$('#btnUpdateModalClose').removeClass('w3-green');
+	$('#btnUpdateModalClose').addClass('w3-red');
+	$('#btnUpdateModalSave').removeClass('w3-green');
+	$('#btnUpdateModalSave').addClass('w3-red');
+	$('#updateH2').text('삭제 모드');
+	$('#deleteMode').text('수정 모드');
+	mode='delete';
+}
+
+function updateToUpdateMode(){
+	$('#updateHeader').removeClass('w3-red');
+	$('#updateHeader').addClass('w3-green');
+	$('#updateFooter').removeClass('w3-red');
+	$('#updateFooter').addClass('w3-green');
+	$('#btnUpdateModalClose').removeClass('w3-red');
+	$('#btnUpdateModalClose').addClass('w3-green');
+	$('#btnUpdateModalSave').removeClass('w3-red');
+	$('#btnUpdateModalSave').addClass('w3-green');
+	$('#updateH2').text('수정 모드');
+	$('#deleteMode').text('삭제 모드');
+	mode='';
+}
+
+function clearLines(ctx,pos,c){	
+	console.log('pos1 라인삭제전 요청Pos => ',pos);		
+	for (var i=lineArr.length-1;i>0;i--){
+		console.log('삭제 대상 : '+pos+'==>'+lineArr[i].pos1 + '/' + lineArr[i].pos2);
+		if(lineArr[i].pos1 == pos || lineArr[i].pos2 == pos){
+			console.log(i + '번째 삭제');
+			redoArr.push({'line':lineArr[i],'tag':''});
+			lineArr.splice(i,1);
+		}
+	}	
+	ctx.clearRect(0,0,c.width,c.height);
+	ctx.beginPath();	
+	$.each(lineArr,function(i,v){				
+		//console.log(i+"번째");
+		//console.log(v);
+		ctx.moveTo(v.x1,v.y1);
+		ctx.lineTo(v.x2,v.y2);
+		ctx.stroke();
+	})
+}
+
+function createCanvas(table){
+	var width = table.innerWidth();
+	var height = table.innerHeight();
+	$('#canvas').attr({'width':width,'height':height});
+	console.log(width+'/'+height);
+	$("#home img").draggable({ revert: true});
+}
+
+
+function openItem(evt, itemName) {
+  var i, x, tablinks;
+  x = document.getElementsByClassName("item");
+  for (i = 0; i < x.length; i++) {
+      x[i].style.display = "none";
+  }
+  tablinks = document.getElementsByClassName("tablink");
+  for (i = 0; i < x.length; i++) {
+      tablinks[i].className = tablinks[i].className.replace(" w3-red", "");
+  }
+  document.getElementById(itemName).style.display = "block";
+  evt.currentTarget.className += " w3-red";
+}
+
+function clearEffectLine(){
+	$.each($('#slideContent ul'),function(i,v){
+		v.className = v.className.replace(" w3-border w3-border-blue","");
+	});	
+}
+function clearEffectLine1(){
+	$.each($('#slideContent ul'),function(i,v){
+		v.className = v.className.replace(" w3-border w3-border-green","");
+	});	
+}
+</script>
+<style>
+	body {
+		font-family: "Roboto", sans-serif
+	}
+	.w3-bar-block .w3-bar-item{
+		padding:16px;font-weight:bold
+	}
+	table td{
+		border: none;
+		width:10%;
+		height:100px;
+		z-index:1;
+	}
+		
+	.package{
+		width:100%;
+		z-index:2;
+	}
+	
+	.class{
+		width:100%;
+		border:1px solid lightgreen;				
+		z-index:2;
+	}
+	
+	.interface{
+		width:100%;
+		z-index:2;
+	}
+	
+	.package-label{
+		color:white;
+	}
+	
+	.class-label{
+		color:white;
+	}
+	
+	.interface-label{
+		color:white;
+	}
+	
+	.addAttr{
+		cursor:cell;
+	}
+	.updateAttr{
+		cursor:wait;
+	}
+	.deleteAttr{
+		cursor:no-drop;
+	}
+	.deleteAll{
+		cursor:url,auto;
+	}
+	#canvas{
+		position:absolute;
+		z-index:-1;
+		left:282px;
+		top:120px;
+	}
+	
+	#slideTitle li:hover{
+		background-color:#DDDDDD;
+	}
+	
+	#slideUser li:hover{
+		background-color:#66FF33;
+	}
+
+</style>
+<body>
+<input type="hidden" name="proNo" id="proNo" value="<%=proNo%>">
+<input type="hidden" name="mem_id" id="mem_id" value="<%=mem_id%>">
+<input type="hidden" name="mem_name" id="mem_name" value="<%=mem_name%>">
+<input type="hidden" name="mode" id="mode" value="<%=mode%>">
+<input type="hidden" name="docNo" id="docNo" value="<%=docNo%>">
+<input type="hidden" name="fileName" id="fileName" value="<%=fileName%>">
+<input type="hidden" name="title" id="title" value="<%=title%>">
+
+
+
+<canvas id="canvas" style=""></canvas>
+<form id="saveForm" method="post" action="/downloadSlide">
+	<input type="hidden" id="data" name="data" value="">
+</form>
+<nav class="w3-sidebar w3-bar-block w3-collapse w3-animate-left w3-card" style="z-index:3;width:250px; border:5px solid #DDDDDD;" id="mySidebar">
+  <div class="w3-center" style="z-index:3;width:240px;border:5px solid #DDDDDD;">
+	      <ul id="slideTitle" class="w3-ul w3-center w3-border w3-border-gray" style="margin-left:15px;margin-right:15px;margin-top:10px;margin-bottom:10px;">
+				<li>제목없는 ClassDo</li>
+		  </ul>
+		  <div>[ Class *. do ]</div>
+		  <ul id="slideUser" class="w3-ul w3-center w3-border w3-border-green" style="margin-left:15px;margin-right:15px;margin-top:10px;">
+			<li>Adam</li>
+		  </ul>
+		  <br>
+  </div>
+  <form id="fileForm" name="fileForm" method="post" action="/openSlide" enctype="multipart/form-data">
+	<input type="file" style="display:none" name="file" id="file">
+  </form>
+  <div id="slideList" style="border:5px solid #DDDDDD">
+	  <a id="open" class="w3-bar-item w3-button" href="#" onclick="document.all.file.click();" style="border:5px solid #DDDDDD"><i class="far fa-folder-open"></i>파일열기</a>
+	  <a id="save" class="w3-bar-item w3-button" href="#" style="border:5px solid #DDDDDD"><i class="far fa-save"></i>저장(server)</a>
+	  <a id="saveToDownload" class="w3-bar-item w3-button" href="#" style="border:5px solid #DDDDDD"><i class="fas fa-download"></i>다운로드(.do)</a>
+	  <a id="saveToPPT" class="w3-bar-item w3-button" href="#" style="border:5px solid #DDDDDD"><i class="far fa-file-powerpoint"></i>저장(pptx)</a>
+	  <a id="exit" class="w3-bar-item w3-button" href="#" style="border:5px solid #DDDDDD"><i class="far fa-times-circle"></i>종료</a>
+  </div>
+</nav>
+
+<div class="w3-main" style="margin-left:250px;">
+	<header class="w3-container w3-white" style="padding:3px 32px;">
+		<div id="itemList" class="w3-bar w3-black" style="border:5px solid #DDDDDD;">
+			<a href="#" data-type="home" class="w3-bar-item w3-button tablink w3-red" onclick="openItem(event,'home')">홈</a>
+			<a href="#" data-type="inline" class="w3-bar-item w3-button tablink" onclick="openItem(event,'inline')">연결</a>
+			<a href="#" data-type="design" class="w3-bar-item w3-button">디자인</a>
+			<a href="#" data-type="etc" class="w3-bar-item w3-button">기타</a>
+		</div>
+		<div id="home" class="w3-white item">
+		  <img class="homeItem" id="package" title="패키지" src="/imgs/slide/package.png"style="width:60px;height:50px;margin-top:10px">		  
+		  <img class="homeItem" id="class" title="클래스" src="/imgs/slide/class.png"style="width:60px;height:50px;margin-top:10px">		  
+		  <img class="homeItem" id="interface" title="인터페이스" src="/imgs/slide/interface.png"style="width:60px;height:50px;margin-top:10px">		  
+		  <img id="help" title="도움말" src="/imgs/slide/help.png"style="width:60px;height:50px;margin-top:10px">		
+		</div>
+		<div id="inline" class="w3-white item" style="display:none;">		  
+		  <img id="undo" class="w3-hover-opacity" title="실행취소" src="/imgs/slide/undo.png"style="width:60px;height:50px;margin-top:10px">		  
+		  <img id="redo" class="w3-hover-opacity" title="되돌리기" src="/imgs/slide/redo.png"style="width:60px;height:50px;margin-top:10px">
+		  <img id="updating" class="w3-hover-opacity" title="삐카츄" src="/imgs/slide/updating.gif"style="width:60px;height:50px;margin-top:10px">		  		  
+		  <img id="rightLine" class="w3-hover-opacity" title="시작" src="/imgs/slide/right.png"style="width:60px;height:50px;margin-top:10px">		  
+		</div>
+	</header>
+
+
+	<div class="w3-container" style="padding:32px;border:10px solid #DDDDDD;">
+			<div id="slideBody">
+				<table id="slideContent" class="w3-table" style="z-index:2">
+				</table>
+			</div>
+	</div>
+
+	<footer class="w3-container w3-white" style="padding:15px">
+	  <p class="w3-center">CopyRight 2018 *.do by ddit AMUMU</p>
+	</footer>   
+</div>
+
+
+
+<!--수정모달-->
+<div id="updateModal" class="w3-modal">
+	<div class="w3-modal-content w3-center w3-animate-zoom" style="width:400px">
+	<header id="updateHeader" class="w3-container w3-green"> 
+		<span onclick="document.getElementById('updateModal').style.display='none'"class="w3-button w3-display-topright">&times;</span>
+		<h2 id="updateH2" >수정 모드</h2>
+	</header>
+	<div class="w3-container w3-center w3-padding-large">
+		<div class="w3-cell-row">
+		  <div id="updateDiv" class="w3-container w3-cell">
+		  </div>
+		  <div id="updateContent" class="w3-container w3-cell">
+			<ul class="w3-ul w3-hoverable">
+			  <li data-type="add" class="addAttr" title="클릭하면 추가 됩니다.">속성 추가</li>
+			  <li id="deleteMode" data-type="del" class="deleteAttr" title="클릭하면 모드가 변경 됩니다.">삭제 모드</li>
+			  <li data-type="delAll" class="deleteAll" title="클릭하면 삭제 됩니다.">전체 삭제</li>
+			</ul>
+		  </div>
+		</div>
+	</div>
+		<footer id="updateFooter" class="w3-container w3-green w3-padding-large">
+		<button id="btnUpdateModalClose" class="w3-right w3-btn w3-green w3-round-xlarge w3-text-white">취소</button>
+		<button id="btnUpdateModalSave"  class="w3-right w3-btn w3-green w3-round-xlarge w3-text-white">저장</button>		
+	</footer>
+	</div>
+</div>
+<script>
+</script>
+     
+</body>
+</html> 

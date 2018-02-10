@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title><%=title%></title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-black.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script>
+var chatStatus =false;
+$(function(){	
+	$('#chatStartBtn').on('click',function(){
+		if(!chatStatus){
+			createNewWindow(800,500);				
+			$('#startForm').submit();
+			chatStatus=true;
+		}else{
+			alert('이미 채팅 메신저가 실행중 입니다.');
+		}		
+	});
+	
+	
+});
+
+function createNewWindow(popHeight,popWidth) {						
+	//var newWin = window.open('','statChat',"width=480px,height=100%,scrollbars=no, status=no, resizable=no, fullscreen=no, channelmode=no");
+	var winHeight = document.body.clientHeight;	// 현재창의 높이
+	var winWidth = document.body.clientWidth;	// 현재창의 너비
+	var winX = window.screenLeft;	// 현재창의 x좌표
+	var winY = window.screenTop;	// 현재창의 y좌표
+
+	var popX = winX + (winWidth - popWidth)/1.05;
+	//var popY = winY + (winHeight - popHeight)/2;
+	var popY = winY;
+	var newWin = window.open("","statChat","width="+popWidth+"px,height="+popHeight+"px,top="+popY+",left="+popX,+",scrollbars=no, status=no, resizable=no, fullscreen=no, channelmode=no");
+}
+
+function chatClose(){
+	chatStatus = false;
+	console.log('채팅 메신저 종료');	
+}
+function parentClick(){
+	console.log('왕됬땅!!!');
+}
+</script>
+</head>
+<body>
+<form id="startForm" method="post" action="http://192.168.201.18:3000/talk" target="statChat">
+접속아이디 : <input type="text" name="chat[loginId]"><br>
+접속이름 : <input type="text" name="chat[loginName]"><br>
+<button type="button" id="chatStartBtn" >채팅 시작</button>
+</form>
+</body>
+</html>

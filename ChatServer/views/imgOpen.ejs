@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title><%=title%></title>
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-orange.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script>
+	$(function(){
+		$('#img').on('click',function(){
+			window.close();
+		});
+		$('html').on('click',function(){
+			window.close();
+		});
+		
+	  $('body').keyup(function(key){
+		if(key.keyCode==27){
+			window.close();
+		}
+	  })
+	  
+	});
+</script>
+<meta charset="UTF-8">
+</head>
+<body title="창 닫기">
+<div class="w3-container"> 
+  <div class="w3-display-container" style="height:1000px">
+    <div class="w3-display-topmiddle w3-hide-small"><h1>사진 크게 보기</h1></div>
+    <div class="w3-display-middle">
+		<img id="img" src="/imgs/imgView/<%=fn%>/<%=rn%>" title="창 닫기"><img>		
+	</div>
+
+
+  </div>
+</div>
+</body>
+</html>

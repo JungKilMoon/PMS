@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= title %></title>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/handsontable/0.35.1/handsontable.min.js"></script>
+	<link rel="stylesheet" media="screen" href="https://cdnjs.cloudflare.com/ajax/libs/handsontable/0.35.1/handsontable.min.css"></link>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+	
+	<script>
+		$(function(){
+			var data = [
+					  ["", "Ford", "Tesla", "Toyota", "Honda"],
+					  ["2017", 10, 11, 12, 13],
+					  ["2018", 20, 11, 14, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13],
+					  ["2019", 30, 15, 12, 13]
+			];
+
+			var container = document.getElementById('example');
+			var hot = new Handsontable(container, {
+			  data: data,
+			  rowHeaders: true,
+			  colHeaders: true
+			});
+		})
+	</script>
+  </head>
+  <body>
+	<div id="example"></div>
+  </body>
+</html>
+

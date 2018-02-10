@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title><%=title%></title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+<link rel="stylesheet" href="https://www.w3schools.com/lib/w3-theme-orange.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/socket.io-stream.js"></script>
+<script src="/js/socket.io-file-client.js"></script>
+<script>		
+	var chatMap = new Map();	
+	var cnt = 1;
+	var targetNm=""
+	var socket = io('http://'+location.host);
+	$(function(){		
+		socket.emit('join:login',{
+			loginId : $('#loginId').val(),
+			loginName : $('#loginName').val()
+		});	
+  	  
+		$.ajax({
+			url:'/talk/friendList',
+			type:'post',
+			dataType:'json',
+			data : {'id':$('#loginId').val()}
+		}).done(function(data){	
+			var sCode="";			
+			$.each(data,function(i){	
+				var code ="";
+				var code2 ="";
+				var id = data[i].MEM_ID;
+				var name = data[i].MEM_NAME;
+				var agencyName = data[i].AGENCY_NAME;
+				var agencyNo = data[i].AGENCY_NO;
+				var roomNo = data[i].ROOM_NO;
+				var nickname = data[i].NICKNAME;
+				var chatStatus = data[i].CHAT_STATUS;
+				var length = $('#mainFriendList .a'+agencyNo).length;
+				console.log('테스트중',length);
+				if(length==0){
+					code+='<ul class="w3-ul w3-border w3-hoverable a'+agencyNo+'">';
+					code+='<li class="w3-theme" disabled>'+agencyName+'</li>';
+					code+='<li class="liUser" data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'">';  
+					code+='<img class="w3-circle" src="/imgs/userIcon/'+id+'" style="width:55px;height:55px;z-index:1;" >&nbsp;<span style="font-size:20px">'+name+' <img class="chatStatus" src="/imgs/m/'+chatStatus+'.gif" style="width:30px;height:30px"></span><br>';
+					code+='<span style="font-size:20px">( '+nickname+' )</span>'; 
+					code+='</li>';  
+					code+='</ul><br>';						
+					$('#mainFriendList').append(code);
+				}else{
+					code2+='<li class="liUser" data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'">';  
+					code2+='<img class="w3-circle" src="/imgs/userIcon/'+id+'" style="width:55px;height:55px;z-index:1;" >&nbsp;<span style="font-size:20px">'+name+' <img class="chatStatus" src="/imgs/m/'+chatStatus+'.gif" style="width:30px;height:30px"></span><br>';
+					code2+='<span style="font-size:20px">( '+nickname+' )</span>'; 
+					code2+='</li>'; 
+					$('#mainFriendList .a'+agencyNo).append(code2);						
+				}
+				sCode+='<li data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'">'+name+' 님과의 채팅방</li>';
+			});	
+			$('#singleChatRoom').html(sCode);				
+		});		
+	  //브라우저  width:460px  hegiht:700px;
+	  var cnt = 5;
+	  socket.on('addmyFriend',function(findId,roomNo){
+		console.log(findId+'가 친추를했다. =>' + roomNo);
+		 //alert(name + ' 님이 당신을 동료로 선택했습니다.!\n동료 목록에 추가합니다.');
+			$.ajax({
+				url:'/talk/findId',
+				type:'post',
+				dataType:'json',
+				data : {'findId':findId}
+			}).done(function(data){
+				console.log(data);
+				var agencyNo = data[0].AGENCY_NO;
+				var agencyName = data[0].AGENCY_NAME;
+				var id = data[0].MEM_ID;
+				var name = data[0].MEM_NAME;
+				var nickname = data[0].NICKNAME;
+				var chatStatus = data[0].CHAT_STATUS;
+				var agencyCnt = $('#mainFriendList .a'+agencyNo).length;
+				var code="";
+				var fImgCode = '<img class="w3-circle" src="/imgs/userIcon/'+id+'" style="width:120px;height:120px;z-index:1;">';
+				$('#friendImg').html(fImgCode);
+				$('#friendId').text(id);
+				$('#friendName').text(name);
+				$('#friendAgencyName').text(agencyName);
+				$('#friendModal').css('display','block');
+				var timer = setInterval(function(){				
+					$('#closeCount').text(cnt-- + '초 후 창이 닫힙니다.');
+					if(cnt<0){
+						$('#friendModal').css('display','none');
+						cnt=5;
+						clearInterval(timer);
+						console.log('닫힘');
+					}
+					console.log('안닫힘');
+				}, 1000);				
+				if(agencyCnt==0){					
+					code+='<ul class="w3-ul w3-border w3-hoverable a'+agencyNo+'">';
+					code+='<li class="w3-theme" disabled>'+agencyName+'</li>';
+					code+='<li class="liUser" data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'"><img class="w3-circle" src="/imgs/userIcon/'+id+'" style="width:55px;height:55px" >&nbsp;<span style="font-size:20px">'+name+'<img class="chatStatus" src="/imgs/m/'+chatStatus+'.gif" style="width:30px;height:30px"></span><br><span style="font-size:20px">( '+nickname+' )</span></li>';
+					code+='</ul><br>';
+					$('#mainFriendList').append(code);
+				}else{
+					$('#mainFriendList .a'+agencyNo).append('<li class="liUser" data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'"><img class="w3-circle" src="/imgs/userIcon/'+id+'" style="width:55px;height:55px" >&nbsp;<span style="font-size:20px">'+name+'<img class="chatStatus" src="/imgs/m/'+chatStatus+'.gif" style="width:30px;height:30px"></span><br><span style="font-size:20px">( '+nickname+' )</span></li>');
+				}
+				var sCode = '<li data-id="'+id+'" data-name="'+name+'" data-roomNo="'+roomNo+'">'+name+' 님과의 채팅방</li>';
+				$('#singleChatRoom').html(sCode);				
+			});
+	  });
+	  
+	  
+	  socket.on('loginStatusChange',function(id,status){
+		console.log(id + '의 상태가 => ',status);
+		var tagLength = $('#mainFriendList li[data-id='+id+']').length;
+		
+		console.log('친구있냐 ? =>'+tagLength);
+		if(tagLength>0){
+			$('li[data-id='+id+'] .chatStatus').attr('src','/imgs/m/'+status+'.gif');
+		}
+		
+	  });
+	  $('#cChatList').hide();
+	  $('#cMemList').show();
+	  $('#memberList').addClass('w3-white');
+	  
+	  $('#memberList').on('click',function(){
+		console.log('회원목록');
+		$('#cChatList').hide();
+	    $('#cMemList').fadeIn();
+		$('#memberList').addClass('w3-white');
+		$('#myChatList').addClass('w3-orange');
+		$('#memberList').removeClass('w3-orange');
+		$('#myChatList').removeClass('w3-white');
+	  });
+	  
+	  $('#myChatList').on('click',function(){
+		$.ajax({
+			url :'/talk/chatRoomList',
+			type:'post',
+			dataType:'json',
+			data:{'id':$('#loginId').val()}
+		}).done(function(data){
+			console.log(data);
+			var code="";
+			$.each(data,function(i){
+				code+='<li data-id="" data-name="'+data[i].ROOM_TITLE+'" data-roomNo="'+data[i].ROOM_NO+'">'+data[i].ROOM_TITLE+' 채팅방</li>';
+			});
+			$('#projectChatRoom').html(code);
+		});
+	  	$('#cChatList').fadeIn();
+	    $('#cMemList').hide();
+		$('#memberList').addClass('w3-orange');
+		$('#myChatList').addClass('w3-white');
+		$('#memberList').removeClass('w3-white');
+		$('#myChatList').removeClass('w3-orange');
+	  });
+	  
+	  $('#cChatList').delegate('li','click',function(){
+		var loginId = $('#loginId').val(); 	
+		var loginName = $('#loginName').val(); 	
+		var chatId = $(this).attr('data-id'); 	
+		var chatNm = $(this).attr('data-name'); 		
+		var roomNo = $(this).attr('data-roomNo');
+		$('#chatId').val(chatId);
+		$('#chatNm').val(chatNm);
+		$('#roomNo').val(roomNo);
+		console.log('%s / %s / %s / %s',loginId,chatId,chatNm,roomNo);
+		if(!chatMap.has(roomNo)){
+			createNewWindow();
+			chatMap.set(roomNo,chatNm+'와의 대화방');		
+			$('#infoForm').submit();
+		}else{
+			alert('이미 대화중입니다.');
+			return;
+		}
+		cnt++;
+		targetNm = targetNm.split('_')[0]+'_'+cnt;
+		$('#infoForm').attr('target',targetNm);
+		console.log(chatMap);
+	  });
+	  
+	  $('#cMemList').delegate('.liUser','click',function(){	  
+	    //채팅 하려는 사람 정보
+		var loginId = $('#loginId').val(); 	
+		var chatId = $(this).attr('data-id'); 	
+		var chatNm = $(this).attr('data-name'); 		
+		var roomNo = $(this).attr('data-roomNo');
+		
+		$('#chatId').val(chatId);
+		$('#chatNm').val(chatNm);
+		$('#roomNo').val(roomNo);		
+		console.log('%s / %s / %s / %s',loginId,chatId,chatNm,roomNo);
+		if(!chatMap.has(roomNo)){
+			createNewWindow();
+			chatMap.set(roomNo,chatNm+'와의 대화방');		
+			$('#infoForm').submit();
+		}else{
+			alert('이미 대화중입니다.');
+			return;
+		}
+		cnt++;
+		targetNm = targetNm.split('_')[0]+'_'+cnt;
+		$('#infoForm').attr('target',targetNm);
+		console.log(chatMap);
+		//window.open('http://localhost:3000/talk', '_blank',"toolbar=no,resizable=no,titlebar=no,status=no,width=530px,height=720px");
+	  });
+
+	  
+	  $( window ).scroll( function() {
+		  if ( $( this ).scrollTop() > 100 ) {
+			$( '#goTop' ).fadeIn();
+		  } else {
+			$( '#goTop' ).fadeOut();
+		  }
+	  });
+	  
+	  $( '#goTop' ).click( function() {
+		  $( 'html, body' ).animate( { scrollTop : 0 }, 400 );
+			return false;
+	  });
+	  
+	  $('.modalClose').on('click',function(){
+		$('#findFriends').css('display','none');
+		$('#searchMemId').val('');
+	  });
+	  
+	  $('.modalOpen').on('click',function(){
+		$('#findResult').html('<br><br><h2 style="color:#009688">아이디로 동료를 찾아보세요.</h2>상대방의 아이디를 입력하고,<br>Enter를 눌러주세요.<br>');
+		$('#findFriends').css('display','block');
+		$('#searchMemId').focus();
+	  });
+
+	  $('body').keyup(function(key){
+		if(key.keyCode==27){
+			$('#friendModal').css('display','none');
+		}
+	  });
+	  var findObj;
+	  $("#searchMemId").keyup(function(key){
+        if(key.keyCode==13){
+			var findId = $(this).val();
+			console.log('검색할 아이디 : %s',findId);
+			$.ajax({
+				url:'/talk/findId',
+				type:'post',
+				dataType:'json',
+				data : {'findId':findId}
+			}).done(function(data){
+				if(data.length>0){
+					var code = '<ul class="w3-ul w3-border w3-animate-right">';
+						code+='<li class="w3-yellow" disabled>검색 결과</li>';
+						code+='<li data-id="'+data[0].MEM_ID+'" data-name="'+data[0].MEM_NAME+'">';
+						code+='<img class="w3-circle" src="/imgs/userIcon/'+data[0].MEM_ID+'" style="width:70px;height:70px">&nbsp;<br>';
+						code+='<span style="font-size:20px">'+data[0].MEM_NAME+'</span><br>';
+						code+='<span style="font-size:20px">[ '+data[0].AGENCY_NAME+' ]</span>';
+						code+='</li><div class="w3-yellow" style="height:5px;width:100%"></div></ul><br>';
+						var friendCnt = $('.liUser[data-id="'+data[0].MEM_ID+'"]').length;
+						
+						if(data[0].MEM_ID==$('#loginId').val()){
+							code+='<button class="myButton w3-yellow w3-disabled"><span style="color:black"> 나 </span></button><br><br>';
+						}else if(friendCnt==0){
+							code+='<button id="addFriends" class="myButton w3-animate-left w3-yellow"><span style="color:black">동료 추가</span></button><br><br>';
+						}
+						else if(friendCnt>0){
+							code+='<button class="myButton w3-yellow w3-disabled"><span style="color:black"> 친 구 </span></button><br><br>';
+						}
+						findObj = {id:data[0].MEM_ID,name:data[0].MEM_NAME,agency:data[0].AGENCY_NAME,agencyNo:data[0].AGENCY_NO,nickname:data[0].NICKNAME,chatStatus:data[0].CHAT_STATUS};
+					$('#findResult').html(code);
+				}else{
+					$('#findResult').html('<br><br><br>'+findId + '에 대한 검색결과가 없습니다.');
+				}
+				
+			});			
+			$(this).val('');
+        }else{
+			console.log(key.values);
+		}
+      });
+	  
+	  $('#findResult').delegate('#addFriends','click',function(){
+		if(confirm('동료를 추가 하시겠습니까?')){
+			$.ajax({
+				url:'/talk/addFriend',
+				type:'post',
+				dataType:'json',
+				data : {'loginId':$('#loginId').val(),friendId:findObj.id}
+			}).done(function(data){
+				console.log(data);
+				if(data.result=='true'){
+					$('#findFriends').css('display','none');
+					$('#searchMemId').val('');			
+					var agencyCnt = $('#mainFriendList .a'+findObj.agencyNo).length;
+					var code="";
+					if(agencyCnt==0){
+						code+='<ul class="w3-ul w3-border w3-hoverable a'+findObj.agencyNo+'">';
+						code+='<li class="w3-theme" disabled>'+findObj.agency+'</li>';
+						code+='<li class="liUser" data-id="'+findObj.id+'" data-name="'+findObj.name+'" data-roomNo="'+data.roomNo+'"><img class="w3-circle" src="/imgs/userIcon/'+findObj.id+'" style="width:55px;height:55px" >&nbsp;<span style="font-size:20px">'+findObj.name+'<img class="chatStatus" src="/imgs/m/'+findObj.chatStatus+'.gif" style="width:30px;height:30px"></span><br><span style="font-size:20px">( '+findObj.nickname+' )</span></li>';
+						code+='</ul><br>';
+						$('#mainFriendList').append(code);
+					}else{
+						$('#mainFriendList .a'+findObj.agencyNo).append('<li class="liUser" data-id="'+findObj.id+'" data-name="'+findObj.name+'" data-roomNo="'+data.roomNo+'"><img class="w3-circle" src="/imgs/userIcon/'+findObj.id+'" style="width:55px;height:55px" >&nbsp;<span style="font-size:20px">'+findObj.name+'<img class="chatStatus" src="/imgs/m/'+findObj.chatStatus+'.gif" style="width:30px;height:30px"></span><br><span style="font-size:20px">( '+findObj.nickname+' )</span></li>');
+					}
+					console.log(code);
+					var ioData = {id:findObj.id, roomNo:data.roomNo};
+					socket.emit('addFriend',ioData);
+					alert(findObj.name + '님이 추가 되었습니다.');
+				}else{
+					console.log('에러내용 : ', data.result);
+				}
+				
+			});
+
+		}
+	  });
+	  
+	  $('#loginStatus a').on('click',function(){
+		var status = $(this).attr('id');
+		var loginId = $('#loginId').val();
+		$.get( "/talk/loginStatusChange/"+status+"/"+loginId, function( res ) {
+			console.log(res);
+			if(res.result>0){
+				$('#loginStatusP').html('<img src="/imgs/m/'+status+'.gif" style="width:30px;height:30px">');
+				socket.emit('statusChange',loginId,status);
+			}else{
+				alert('상태변경 실패 : 데이터베이스 변경 실패');
+				return;
+			}
+		});	  
+		
+	  });
+	  
+	  $('.friendModalClose').on('click',function(){
+		$('#friendModal').css('display','none');
+	  });
+	 //jQuery 종료 
+	});
+	
+	function createNewWindow() {				
+		targetNm = $('#infoForm').attr('target');		
+		var newWin = window.open('',targetNm,"width=593px,height=787px,scrollbars=no, status=no, resizable=no, fullscreen=no, channelmode=no");
+	}
+	
+	function deletePopupWindow(){
+		var endRoomNo = $('#endForChat').val();
+		console.log('%s 방 대화 종료',endRoomNo);
+		chatMap.delete(endRoomNo);		
+	}
+
+
+
+
+</script>
+<style>
+#goTop {
+  position: fixed;
+  left: 80%;
+  bottom: 30%;
+  display: none;
+}
+
+.w3-myFont {
+    font-family: "Comic Sans MS", cursive, sans-serif;
+}
+.w3-button2{
+	border:none;display:inline-block;
+	outline:0;padding:8px 16px;
+	vertical-align:middle;overflow:hidden;
+	text-decoration:none;color:inherit;
+	background-color:inherit;
+	text-align:center;
+	cursor:pointer;
+	white-space:nowrap
+}
+.myButton{
+	border:none;display:inline-block;
+	outline:0;padding:8px 16px;
+	vertical-align:middle;overflow:hidden;
+	text-decoration:none;
+	color:inherit;
+	background-color:inherit;
+	text-align:center;
+	cursor:pointer;
+	white-space:nowrap
+}
+.myButton:hover{box-shadow:0 8px 16px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19)}
+</style>
+</head>
+<body>
+	<input type="hidden" id="endForChat" value="">
+	<form id="infoForm" method="post" action="http://192.168.201.18:3000/talk/talkPlay" target="targetNm_1">
+		<input type="hidden" id="loginId" name="chat[loginId]" value="<%=loginId%>">
+		<input type="hidden" id="loginName" name="chat[loginName]" value="<%=loginName%>">
+		<input type="hidden" id="chatId"  name="chat[chatId]" value="">
+		<input type="hidden" id="chatNm"  name="chat[chatNm]" value="">
+		<input type="hidden" id="roomNo"  name="chat[roomNo]" value="">		
+	</form>
+	<header class="w3-container w3-theme w3-padding" id="myHeader"> 
+	  <div class="w3-center">
+	  <h4 style="color:white" class="w3-animate-top">PMS OPEN CHATTING</h4>
+	  <h1 style="color:white" class="w3-xxxlarge w3-animate-bottom">PMS 채팅</h1>
+	  </div>
+	</header>
+	<div style="background-color:black;width:100%;height:3px"></div>
+	<div class="w3-bar w3-theme">
+	  <a id="memberList" href="#" class="w3-bar-item w3-button2 w3-padding-16 w3-animate-left" style="width:50%">동료목록</a>
+	  <a id="myChatList" href="#" class="w3-bar-item w3-button2 w3-padding-16 w3-animate-right" style="width:50%">나의 채팅방</a>
+	</div>
+	<div class="w3-row-padding w3-center w3-margin-top">	
+	  <div class="w3-panel w3-border-top w3-border-bottom w3-border-theme">
+		<br>
+	  <div class="w3-dropdown-hover" id="loginStatus">
+		<button class="w3-button w3-orange w3-round-xlarge" style="min-width:130px"><span style="color:white">상태변경</span></button>
+		<div class="w3-dropdown-content w3-bar-block w3-border" style="min-width:130px">
+		  <a href="#" id="LOGIN" class="w3-bar-item w3-button w3-center">접속중 <img src="/imgs/m/LOGIN.gif" style="width:15px;height:15px"></a>
+		  <a href="#" id="BUSY" class="w3-bar-item w3-button w3-center">외출중 <img src="/imgs/m/BUSY.gif" style="width:15px;height:15px"></a>
+		  <!--<a href="#" id="LOGOUT" class="w3-bar-item w3-button w3-center">퇴근함 <img src="/imgs/m/LOGOUT.gif" style="width:15px;height:15px"></a>-->
+		</div>
+	  </div>
+		<p class="w3-animate-right" id="loginStatusP"><img src="/imgs/m/LOGIN.gif" style="width:30px;height:30px"></p>		
+		<img class="w3-circle" src="/imgs/userIcon/<%=loginId%>" style="width:70px;height:70px">
+		<p class="w3-animate-right">회원 ID : <%=loginId%></p>
+      </div>
+	  <button class="myButton w3-theme w3-animate-left modalOpen"><span style="color:white">동료 찾기</span></button>
+	</div>
+	<div class="w3-row-padding w3-center w3-margin-top w3-animate-bottom">	
+		<div class="w3-third" id="cMemList" style="width:100%">
+		  <div class="w3-card w3-container" style="min-height:500px">
+		  <h3>동료 목록</h3><br>
+			  <div id="mainFriendList">
+			  <!--
+				  <ul id="agency1" class="w3-ul w3-border w3-hoverable">				  
+					  <li class="w3-theme" disabled>(주)정길</li>
+					  <li class="liUser" data-id="testId" data-name="이지은" data-roomNo="1">
+					  <img id="testIng" class="w3-circle" src="/imgs/userIcon/hiu" style="width:55px;height:55px;z-index:1;" >&nbsp;<span style="font-size:20px">가지은 <img src="/imgs/m/LOGIN.gif" style="width:30px;height:30px"></span><br>
+					  <span style="font-size:20px">(그글커뮤니케이션)</span>
+						</li>
+				  </ul><br>
+				  -->
+			  </div>
+		  </div>
+		  <br><br>
+		</div>
+		
+		
+		<div class="w3-third" id="cChatList">
+		  <div class="w3-card w3-container" style="min-height:600px">
+		  <h3>나의 채팅 목록</h3><br>
+		  <ul class="w3-ul w3-border w3-hoverable">
+			  <li class="w3-theme">프로젝트 채팅방</li>
+			  <div id="projectChatRoom">
+			  </div>
+			  <hr>
+			  <li class="w3-theme">1:1 채팅방</li>
+			  <div id="singleChatRoom">
+			  </div>
+			  
+			  
+			  <!--<li data-id="testId3" data-name="카톡맨" data-roomNo="3">카톡맨과의 채팅</li>-->
+		  </ul>
+		  </div>
+		  <br><br><br>
+		</div>		
+	</div>
+	
+		<a id="goTop"style="display:scroll;position:fixed;bottom:30px;right:30px;" title="<%=loginName%>"><img class="w3-circle w3-spin" src="/imgs/userIcon/<%=loginId%>" style="width:75px;height:75px" ></a>
+		<!-- <span id="goTop" class="w3-tag w3-spin w3-large">맨 위로</span> !-->
+
+<footer class="w3-container w3-orange w3-padding-16">
+  <p style="color:white">© 2018 *.Do DDIT Corporation All Rights Reserved.<a href="http://www.ddit.or.kr">ddit.or.kr</a></p>  
+</footer>
+
+  <div id="findFriends" class="w3-modal">
+    <div class="w3-modal-content w3-animate-top w3-card-4">
+      <header class="w3-container w3-yellow"> 
+	    <br>
+        <span class="w3-button w3-display-topright modalClose">&times;</span>
+        <div class="w3-xxlarge w3-myFont w3-center">PMS - Find a colleague</div>
+		<br>
+      </header>
+	  <br>
+	  <div class="w3-container w3-card-4 w3-light-grey w3-text-yellow w3-margin">
+		  <div class="w3-row w3-section">
+			  <div class="w3-col" style="width:50px"><i class="w3-xxlarge fa fa-pencil"></i></div>
+				<div class="w3-rest">
+				  <input id= "searchMemId" class="w3-input w3-border" name="id" type="text" placeholder="검색할 동료 ID">
+				</div>
+		  </div>
+	  </div>
+		
+	  <div id="findResult" class="w3-center" style="min-height:200px" > 
+
+	  </div>
+      <footer class="w3-container w3-yellow">
+        <button type="button" class="w3-btn w3-padding w3-yellow w3-right modalClose" style="width:120px" >닫기 &nbsp; ❯</button>
+      </footer>
+    </div>
+  </div>
+
+  
+  
+  <div id="friendModal" class="w3-modal w3-center">
+    <div class="w3-modal-content w3-center w3-animate-top" style="max-width:500px;">
+      <header class="w3-container w3-orange"> 
+        <span class="w3-button w3-display-topright friendModalClose">&times;</span>
+        <br>
+        <h3 class="w3-center w3-text-light-gray">동료추가 알림</h3>
+        <br>
+      </header>
+      <div class="w3-container w3-center">
+		<form id="mAddForm" action="#" class="w3-container w3-card-4 w3-light-grey w3-text-orange w3-margin w3-center"> 
+		<div class="w3-cell-row">
+			<div class="w3-container w3-cell" style="width:45%">
+				<div class="w3-row w3-section"></div>
+				<div id="friendImg" class="w3-row w3-section w3-spin">					
+				</div>
+			</div>
+
+			<div class="w3-container w3-cell">
+				<div class="w3-row w3-section w3-left">
+				  <label style="font-size:19px;font-weight: bold;">아이디 : <span id="friendId"></span></label>
+				</div>
+				<div class="w3-row w3-section w3-left">
+				  <label style="font-size:19px;font-weight: bold;">이름 : <span id="friendName"></span></label>
+				</div>
+				<div class="w3-row w3-section w3-left">
+				  <label style="font-size:19px;font-weight: bold;">소속 : <span id="friendAgencyName"></span></label>
+				</div>
+			</div>
+		</div>
+		
+	
+
+		<br><br>
+		<button type="button" id="friendModalSubmit" class="w3-btn w3-orange w3-border w3-round-xlarge w3-text-white friendModalClose">확인</button>
+		<br><br>
+		<label class="w3-center w3-text-red w3-animate-right" id="closeCount">5초 후 창이 닫힙니다.</label>
+		
+		</form>
+      </div>
+    </div>
+</div>
+  	<script>
+	window.onbeforeunload = function(){	  
+		$.ajax({
+			url:'/talk/chatLogout',
+			type:'post',
+			async:false,
+			dataType:'json',
+			data : {'id':$('#loginId').val()}
+		}).done(function(data){
+			if(data.result>0){
+				console.log('로그아웃 성공');
+			socket.emit('statusChange',$('#loginId').val(),'LOGOUT');				
+			}else{
+				console.log('로그아웃 실패');
+			}
+		});
+	}
+	</script>
+</body>
+</html>
